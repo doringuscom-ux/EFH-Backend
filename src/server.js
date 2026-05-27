@@ -27,7 +27,10 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // Frontend URLs
+  origin: function (origin, callback) {
+    // Allow any origin dynamically to support localhost, Netlify, Vercel, and custom domains
+    callback(null, true);
+  },
   credentials: true
 }));
 app.use(express.json());
