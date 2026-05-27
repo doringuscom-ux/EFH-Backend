@@ -1,4 +1,5 @@
 import ContactMessage from '../models/ContactMessage.js';
+import { sendAdminContactNotification } from '../utils/emailService.js';
 
 // @desc    Submit a contact message
 // @route   POST /api/contact
@@ -20,6 +21,9 @@ export const submitContactMessage = async (req, res) => {
     });
 
     if (contactMessage) {
+      // Send background email notification
+      sendAdminContactNotification(contactMessage).catch(err => console.error('Failed to send contact email:', err));
+
       res.status(201).json({
         success: true,
         data: contactMessage,

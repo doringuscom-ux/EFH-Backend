@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import { protect } from '../middleware/authMiddleware.js';
 import GlobalSettings from '../models/GlobalSettings.js';
 import OfflineCode from '../models/OfflineCode.js';
+import { sendAdminRegistrationNotification } from '../utils/emailService.js';
 
 const router = express.Router();
 
@@ -111,6 +112,9 @@ router.post('/register', async (req, res) => {
     });
 
     if (user) {
+      // Send background email notification to Admin
+      sendAdminRegistrationNotification(user).catch(err => console.error('Failed to send registration email:', err));
+
       const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || 'supersecretkey', { expiresIn: '30d' });
       const userObj = user.toObject();
       delete userObj.password;

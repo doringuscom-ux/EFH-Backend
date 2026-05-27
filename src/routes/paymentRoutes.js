@@ -7,6 +7,7 @@ import Coupon from '../models/Coupon.js';
 import EventRegistration from '../models/EventRegistration.js';
 import GlobalSettings from '../models/GlobalSettings.js';
 import OfflineCode from '../models/OfflineCode.js';
+import { sendEventRegistrationNotification } from '../utils/emailService.js';
 
 const router = express.Router();
 
@@ -215,6 +216,11 @@ router.post('/create-order', async (req, res) => {
         await event.save();
       }
 
+      const user = await User.findById(userId);
+      if (user) {
+        sendEventRegistrationNotification(user, event, newReg).catch(err => console.error('Failed to send free event email:', err));
+      }
+
       return res.json({
         orderId: 'FREE_EVENT',
         amount: 0,
@@ -279,13 +285,19 @@ router.post('/verify', async (req, res) => {
       const reg = await EventRegistration.findByIdAndUpdate(registrationId, {
         paymentId: razorpay_payment_id,
         status: 'confirmed'
-      });
+      }, { new: true });
 
       if (reg) {
         const event = await Event.findById(reg.event);
-        if (event && !event.participants.includes(reg.user)) {
-          event.participants.push(reg.user);
-          await event.save();
+        if (event) {
+          if (!event.participants.includes(reg.user)) {
+            event.participants.push(reg.user);
+            await event.save();
+          }
+          const user = await User.findById(reg.user);
+          if (user) {
+            sendEventRegistrationNotification(user, event, reg).catch(err => console.error('Failed to send event payment email:', err));
+          }
         }
       }
     }
