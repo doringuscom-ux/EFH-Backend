@@ -8,17 +8,28 @@ import newsRoutes from './routes/newsRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import galleryRoutes from './routes/galleryRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import eventRoutes from './routes/eventRoutes.js';
+import userEventRoutes from './routes/userEventRoutes.js';
+import settingsRoutes from './routes/settingsRoutes.js';
 
-dotenv.config();
+import { fileURLToPath } from 'url';
+import path from 'path';
 
-// Connect to database
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '../.env') });// Connect to database
 // You can uncomment this once MongoDB is running locally or a URI is provided
 connectDB();
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // Frontend URLs
+  credentials: true
+}));
 app.use(express.json());
 
 // Basic route
@@ -33,6 +44,10 @@ app.use('/api/news', newsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/gallery', galleryRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/user-events', userEventRoutes);
+app.use('/api/settings', settingsRoutes);
 
 const PORT = process.env.PORT || 5000;
 

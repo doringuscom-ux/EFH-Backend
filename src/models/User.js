@@ -11,17 +11,19 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide an email'],
     unique: true,
+    lowercase: true,
+    trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email'],
   },
   password: {
     type: String,
     required: [true, 'Please provide a password'],
-    minlength: 6,
+    minlength: 8,
     select: false,
   },
   role: {
     type: String,
-    enum: ['admin', 'athlete', 'coach', 'club', 'viewer', 'user'],
+    enum: ['admin', 'player', 'coach', 'club', 'viewer', 'user'],
     default: 'user',
   },
   // Profile Data (filled during registration)
@@ -37,7 +39,7 @@ const userSchema = new mongoose.Schema({
     bloodGroup: String,
     aadhaarNumber: {
       type: String,
-      match: [/^\d{12}$/, 'Aadhaar number must be exactly 12 digits']
+      match: [/^(?:\d{12})?$/, 'Aadhaar number must be exactly 12 digits']
     },
   },
   guardianInfo: {
@@ -46,16 +48,20 @@ const userSchema = new mongoose.Schema({
     guardianName: String,
   },
   contactInfo: {
-    email: String,
+    email: {
+      type: String,
+      lowercase: true,
+      trim: true,
+    },
     phone: {
       type: String,
-      match: [/^\d{10}$/, 'Phone number must be exactly 10 digits']
+      match: [/^(?:\d{10})?$/, 'Phone number must be exactly 10 digits']
     },
     address: {
       line1: String,
       pinCode: {
         type: String,
-        match: [/^\d{6}$/, 'PIN code must be exactly 6 digits']
+        match: [/^(?:\d{6})?$/, 'PIN code must be exactly 6 digits']
       },
       city: String,
       district: String,
@@ -99,15 +105,25 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  verificationStatus: {
+    verificationStatus: {
     type: String,
     enum: ['pending', 'verified', 'rejected'],
     default: 'pending',
+  },
+  adminMessage: {
+    type: String,
   },
 }, { timestamps: true });
 
 // Hash password before saving
 userSchema.pre('save', async function() {
+  // Always normalize email to lowercase
+  if (this.email) {
+    this.email = this.email.toLowerCase().trim();
+  }
+  if (this.contactInfo?.email) {
+    this.contactInfo.email = this.contactInfo.email.toLowerCase().trim();
+  }
   if (!this.isModified('password')) {
     return;
   }

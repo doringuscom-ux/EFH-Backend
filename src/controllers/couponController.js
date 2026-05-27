@@ -18,7 +18,7 @@ export const createCoupon = async (req, res) => {
     }
 
     const coupon = await Coupon.create({
-      code,
+      code: code.toUpperCase(),
       discountType,
       discountValue,
       expiryDate,
