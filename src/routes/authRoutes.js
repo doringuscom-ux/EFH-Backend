@@ -1,11 +1,10 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, adminGuard } from '../middleware/authMiddleware.js';
 import GlobalSettings from '../models/GlobalSettings.js';
 import OfflineCode from '../models/OfflineCode.js';
-import { sendAdminRegistrationNotification } from '../utils/emailService.js';
-
+import { sendAdminRegistrationNotification, sendOtpEmail } from '../utils/emailService.js';
 const router = express.Router();
 
 // @desc    Auth user & get session
@@ -175,6 +174,78 @@ router.put('/profile', protect, async (req, res) => {
   }
 });
 
+// @desc    Forgot Password - Send OTP
+// @route   POST /api/auth/forgotpassword
+// @access  Public
+router.post('/forgotpassword', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Please provide an email address' });
+
+  try {
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return res.status(404).json({ message: 'User with this email does not exist' });
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set expiry to 15 minutes from now
+    const expireTime = new Date(Date.now() + 15 * 60 * 1000);
+
+    user.resetPasswordOtp = otp;
+    user.resetPasswordExpire = expireTime;
+    await user.save();
+
+    await sendOtpEmail(user.email, otp);
+
+    res.json({ message: 'OTP sent to email successfully' });
+  } catch (error) {
+    console.error('Forgot Password Error:', error);
+    res.status(500).json({ message: 'Server error while sending OTP' });
+  }
+});
+
+// @desc    Reset Password with OTP
+// @route   POST /api/auth/resetpassword
+// @access  Public
+router.post('/resetpassword', async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ message: 'Please provide email, OTP, and new password' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+  }
+
+  try {
+    // Select user where email matches, OTP matches, and expiration is greater than now
+    const user = await User.findOne({ 
+      email: email.toLowerCase().trim(),
+      resetPasswordOtp: otp,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    // Hash is handled by the pre-save hook in User model
+    user.password = newPassword;
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordExpire = undefined;
+    
+    await user.save();
+
+    res.json({ message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset Password Error:', error);
+    res.status(500).json({ message: 'Server error while resetting password' });
+  }
+});
+
 // ========================
 // ADMIN ROUTES
 // ========================
@@ -182,10 +253,58 @@ router.put('/profile', protect, async (req, res) => {
 // @desc    Get all users (Admin)
 // @route   GET /api/auth/admin/users
 // @access  Private/Admin
-router.get('/admin/users', protect, async (req, res) => {
+router.get('/admin/users', protect, adminGuard, async (req, res) => {
   try {
-    const users = await User.find({ role: { $in: ['player', 'coach', 'admin'] } }).select('-password').sort({ createdAt: -1 });
+    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
     res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @desc    Create a new user (Admin)
+// @route   POST /api/auth/admin/users
+// @access  Private/Admin
+router.post('/admin/users', protect, adminGuard, async (req, res) => {
+  try {
+    const { username, email, password, role, personalInfo, contactInfo, clubInfo } = req.body;
+    
+    if (!username || !email || !password || !role) {
+      return res.status(400).json({ message: 'Username, email, password, and role are required' });
+    }
+
+    const emailNormalized = email.toLowerCase().trim();
+    const usernameNormalized = username.toLowerCase().trim();
+
+    // Check if user already exists
+    const userExists = await User.findOne({ $or: [{ email: emailNormalized }, { username: usernameNormalized }] });
+    if (userExists) {
+      return res.status(400).json({ message: 'User already exists with this email or username' });
+    }
+
+    // Hash is handled by user pre-save hook
+    const user = await User.create({
+      username: usernameNormalized,
+      email: emailNormalized,
+      password,
+      role,
+      personalInfo: personalInfo || {},
+      contactInfo: contactInfo || { email: emailNormalized },
+      clubInfo: clubInfo || {},
+      isRegistered: true,
+      isVerified: true,
+      verificationStatus: 'verified',
+      paymentStatus: 'paid',
+      isFeeReceived: true
+    });
+
+    if (user) {
+      const userObj = user.toObject();
+      delete userObj.password;
+      res.status(201).json(userObj);
+    } else {
+      res.status(400).json({ message: 'Invalid user data' });
+    }
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -193,7 +312,7 @@ router.get('/admin/users', protect, async (req, res) => {
 
 // @route   GET /api/auth/admin/users/:id
 // @access  Private/Admin
-router.get('/admin/users/:id', protect, async (req, res) => {
+router.get('/admin/users/:id', protect, adminGuard, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
     if (!user) {
@@ -208,7 +327,7 @@ router.get('/admin/users/:id', protect, async (req, res) => {
 // @desc    Verify/Reject User Profilecation status (Admin)
 // @route   PUT /api/auth/admin/users/:id/verify
 // @access  Admin
-router.put('/admin/users/:id/verify', protect, async (req, res) => {
+router.put('/admin/users/:id/verify', protect, adminGuard, async (req, res) => {
   try {
     const { verificationStatus, isVerified } = req.body;
     const user = await User.findByIdAndUpdate(
@@ -228,7 +347,7 @@ router.put('/admin/users/:id/verify', protect, async (req, res) => {
 // @desc    Send note to user and optionally unlock profile (Admin)
 // @route   PUT /api/auth/admin/users/:id/note
 // @access  Admin
-router.put('/admin/users/:id/note', protect, async (req, res) => {
+router.put('/admin/users/:id/note', protect, adminGuard, async (req, res) => {
   try {
     const { adminMessage, unlock } = req.body;
     const updateData = { adminMessage };
@@ -256,9 +375,9 @@ router.put('/admin/users/:id/note', protect, async (req, res) => {
 // @desc    Update any user profile data (Admin)
 // @route   PUT /api/auth/admin/users/:id
 // @access  Admin
-router.put('/admin/users/:id', protect, async (req, res) => {
+router.put('/admin/users/:id', protect, adminGuard, async (req, res) => {
   try {
-    const { username, personalInfo, guardianInfo, contactInfo, clubInfo } = req.body;
+    const { username, personalInfo, guardianInfo, contactInfo, clubInfo, documents } = req.body;
     const email = req.body.email ? req.body.email.toLowerCase().trim() : undefined;
     
     // Check if new email/username is already taken by another user
@@ -277,6 +396,7 @@ router.put('/admin/users/:id', protect, async (req, res) => {
     if (guardianInfo) updateFields.guardianInfo = guardianInfo;
     if (contactInfo) updateFields.contactInfo = contactInfo;
     if (clubInfo) updateFields.clubInfo = clubInfo;
+    if (documents) updateFields.documents = documents;
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -294,7 +414,7 @@ router.put('/admin/users/:id', protect, async (req, res) => {
 // @desc    Update user payment status (Admin)
 // @route   PUT /api/auth/admin/users/:id/payment
 // @access  Admin
-router.put('/admin/users/:id/payment', protect, async (req, res) => {
+router.put('/admin/users/:id/payment', protect, adminGuard, async (req, res) => {
   try {
     const { paymentStatus, isFeeReceived } = req.body;
     const user = await User.findByIdAndUpdate(req.params.id, { paymentStatus, isFeeReceived }, { new: true });
@@ -308,7 +428,7 @@ router.put('/admin/users/:id/payment', protect, async (req, res) => {
 // @desc    Update user role (Admin)
 // @route   PUT /api/auth/admin/users/:id/role
 // @access  Admin
-router.put('/admin/users/:id/role', protect, async (req, res) => {
+router.put('/admin/users/:id/role', protect, adminGuard, async (req, res) => {
   try {
     const { role } = req.body;
     const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true });
@@ -324,7 +444,7 @@ router.put('/admin/users/:id/role', protect, async (req, res) => {
 // @desc    Force update user password (Admin)
 // @route   PUT /api/auth/admin/users/:id/password
 // @access  Admin
-router.put('/admin/users/:id/password', protect, async (req, res) => {
+router.put('/admin/users/:id/password', protect, adminGuard, async (req, res) => {
   try {
     const { password } = req.body;
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+={}\[\]:;<>,.?/~\\-]).{8,}$/;
@@ -345,7 +465,7 @@ router.put('/admin/users/:id/password', protect, async (req, res) => {
 // @desc    Delete user (Admin)
 // @route   DELETE /api/auth/admin/users/:id
 // @access  Admin
-router.delete('/admin/users/:id', protect, async (req, res) => {
+router.delete('/admin/users/:id', protect, adminGuard, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });

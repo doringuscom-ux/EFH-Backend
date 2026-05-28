@@ -113,6 +113,8 @@ const userSchema = new mongoose.Schema({
   adminMessage: {
     type: String,
   },
+  resetPasswordOtp: String,
+  resetPasswordExpire: Date,
 }, { timestamps: true });
 
 // Hash password before saving

@@ -12,6 +12,7 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import userEventRoutes from './routes/userEventRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -51,6 +52,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/user-events', userEventRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 const PORT = process.env.PORT || 5000;
 

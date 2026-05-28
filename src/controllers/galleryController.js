@@ -17,16 +17,26 @@ export const getGallery = async (req, res) => {
 // @access  Private/Admin
 export const addGalleryItem = async (req, res) => {
   try {
-    const { title, category, image } = req.body;
+    const { title, category, image, mediaType, videoUrl } = req.body;
     
-    if (!title || !category || !image) {
-      return res.status(400).json({ message: 'Title, category, and image are required' });
+    if (!title || !category) {
+      return res.status(400).json({ message: 'Title and category are required' });
+    }
+
+    if (mediaType === 'image' && !image) {
+      return res.status(400).json({ message: 'Image is required for image media type' });
+    }
+
+    if (mediaType === 'video' && !videoUrl) {
+      return res.status(400).json({ message: 'Video URL is required for video media type' });
     }
 
     const newGalleryItem = await Gallery.create({
       title,
       category,
-      image
+      image,
+      mediaType: mediaType || 'image',
+      videoUrl
     });
 
     res.status(201).json(newGalleryItem);

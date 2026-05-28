@@ -70,7 +70,7 @@ export const sendAdminRegistrationNotification = async (user) => {
       </table>
       
       <p style="font-size: 12px; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
-        Manage registrations inside your <a href="https://efhorse.netlify.app/admin" style="color: #cba358;">EFH Admin Dashboard</a>.
+        Manage registrations inside your <a href="http://localhost:5173/admin/dashboard" style="color: #cba358;">EFH Admin Dashboard</a>.
       </p>
     </div>
   `;
@@ -125,7 +125,7 @@ export const sendAdminContactNotification = async (message) => {
       </table>
       
       <p style="font-size: 12px; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 15px;">
-        Manage messages inside your <a href="https://efhorse.netlify.app/admin" style="color: #cba358;">EFH Admin Dashboard</a>.
+        Manage messages inside your <a href="http://localhost:5173/admin/dashboard" style="color: #cba358;">EFH Admin Dashboard</a>.
       </p>
     </div>
   `;
@@ -220,4 +220,36 @@ export const sendEventRegistrationNotification = async (user, event, registratio
   await sendViaProxy(ADMIN_EMAIL, adminSubject, adminHtml);
   // Send to User
   await sendViaProxy(user.email, userSubject, userHtml);
+};
+
+/**
+ * Send OTP for Password Reset
+ */
+export const sendOtpEmail = async (email, otp) => {
+  const subject = `EFH: Password Reset Verification Code`;
+  
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 600px; margin: auto;">
+      <h2 style="color: #cba358; border-bottom: 2px solid #cba358; padding-bottom: 10px;">Password Reset Request</h2>
+      <p>Hello,</p>
+      <p>We received a request to reset your password for your EFH account.</p>
+      <p>Your password reset OTP is:</p>
+      <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; text-align: center; margin: 20px 0; color: #333; background: #fafafa; padding: 15px; border-radius: 5px;">
+        ${otp}
+      </div>
+      <p>This OTP is valid for <strong>15 minutes</strong>. Do not share this code with anyone.</p>
+      <p>If you did not request a password reset, you can safely ignore this email.</p>
+      
+      <p style="font-size: 12px; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 15px; margin-top: 30px;">
+        Best regards,<br><strong>Equestrian Federation of Haryana (EFH)</strong>
+      </p>
+    </div>
+  `;
+
+  const result = await sendViaProxy(email, subject, htmlContent);
+  if (result.success) {
+    console.log(`[Email Service] OTP email sent to ${email}`);
+  } else {
+    console.error(`[Email Service] OTP email failed for ${email}:`, result.error);
+  }
 };
