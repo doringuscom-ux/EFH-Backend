@@ -10,7 +10,7 @@ const generateSlug = async (baseText, excludeId = null) => {
   while (!isUnique) {
     const query = { slug: uniqueSlug };
     if (excludeId) query._id = { $ne: excludeId };
-    
+
     const existing = await News.findOne(query);
     if (existing) {
       counter++;
